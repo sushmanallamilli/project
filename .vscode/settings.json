@@ -1,5 +1,5 @@
 {
-  "appService.defaultWebAppToDeploy": "undefined/subscriptions/bcbaab8c-c6ee-485d-a0c0-103178fdb800/resourceGroups/lxk89980-b38b132a/providers/Microsoft.Web/sites/nodetest19998",
-  "appService.deploySubpath": ".",
-  "cSpell.enabled": false
+  "cSpell.enabled": false,
+  "appService.defaultWebAppToDeploy": "/subscriptions/bcbaab8c-c6ee-485d-a0c0-103178fdb800/resourceGroups/remixtestserver/providers/Microsoft.Web/sites/remixtestserver",
+  "appService.deploySubpath": "."
 }
