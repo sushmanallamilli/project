@@ -1,8 +1,8 @@
+import type { User } from "@prisma/client";
+import { Role } from "@prisma/client";
 import { createCookieSessionStorage, redirect } from "@remix-run/node";
 import invariant from "tiny-invariant";
-
-import type { User } from "~/models/user.server";
-import { getUserById } from "~/models/user.server";
+import { getUserById } from "~/lib/user.server";
 
 invariant(process.env.SESSION_SECRET, "SESSION_SECRET must be set");
 
@@ -10,6 +10,7 @@ export const sessionStorage = createCookieSessionStorage({
   cookie: {
     name: "__session",
     httpOnly: true,
+    maxAge: 0,
     path: "/",
     sameSite: "lax",
     secrets: [process.env.SESSION_SECRET],
@@ -18,12 +19,18 @@ export const sessionStorage = createCookieSessionStorage({
 });
 
 const USER_SESSION_KEY = "userId";
+const USER_ROLE_KEY = "userRole";
+const fourteenDaysInSeconds = 60 * 60 * 24 * 14;
+const thirtyDaysInSeconds = 60 * 60 * 24 * 30;
 
 export async function getSession(request: Request) {
   const cookie = request.headers.get("Cookie");
   return sessionStorage.getSession(cookie);
 }
 
+/**
+ * Returns the userId from the session.
+ */
 export async function getUserId(
   request: Request
 ): Promise<User["id"] | undefined> {
@@ -51,12 +58,15 @@ export async function requireUserId(
     const searchParams = new URLSearchParams([["redirectTo", redirectTo]]);
     throw redirect(`/login?${searchParams}`);
   }
+
   return userId;
 }
 
-export async function requireUser(request: Request) {
-  const userId = await requireUserId(request);
-
+export async function requireUser(
+  request: Request,
+  redirectTo: string = new URL(request.url).pathname
+) {
+  const userId = await requireUserId(request, redirectTo);
   const user = await getUserById(userId);
   if (user) return user;
 
@@ -66,22 +76,24 @@ export async function requireUser(request: Request) {
 export async function createUserSession({
   request,
   userId,
-  remember,
+  role,
+  remember = false,
   redirectTo,
 }: {
   request: Request;
-  userId: string;
-  remember: boolean;
+  userId: User["id"];
+  role: User["role"];
+  remember?: boolean;
   redirectTo: string;
 }) {
   const session = await getSession(request);
   session.set(USER_SESSION_KEY, userId);
+  session.set(USER_ROLE_KEY, role);
+
   return redirect(redirectTo, {
     headers: {
       "Set-Cookie": await sessionStorage.commitSession(session, {
-        maxAge: remember
-          ? 60 * 60 * 24 * 7 // 7 days
-          : undefined,
+        maxAge: remember ? fourteenDaysInSeconds : thirtyDaysInSeconds,
       }),
     },
   });
@@ -89,9 +101,25 @@ export async function createUserSession({
 
 export async function logout(request: Request) {
   const session = await getSession(request);
-  return redirect("/", {
+
+  // For some reason destroySession isn't removing session keys
+  // So, unsetting the keys manually
+  session.unset(USER_SESSION_KEY);
+  session.unset(USER_ROLE_KEY);
+
+  return redirect("/login", {
     headers: {
       "Set-Cookie": await sessionStorage.destroySession(session),
     },
   });
+}
+
+export async function isCustomer(request: Request) {
+  const session = await getSession(request);
+  return session.get(USER_ROLE_KEY) === Role.CUSTOMER;
+}
+
+export async function isAdmin(request: Request) {
+  const session = await getSession(request);
+  return session.get(USER_ROLE_KEY) === Role.ADMIN;
 }

@@ -1,71 +1,125 @@
-import { useMatches } from "@remix-run/react";
-import { useMemo } from "react";
+import type { User } from "@prisma/client";
+import { Role } from "@prisma/client";
+import { createCookieSessionStorage, redirect } from "@remix-run/node";
+import invariant from "tiny-invariant";
+import { getUserById } from "~/lib/user.server";
 
-import type { User } from "~/models/user.server";
+invariant(process.env.SESSION_SECRET, "SESSION_SECRET must be set");
 
-const DEFAULT_REDIRECT = "/";
+export const sessionStorage = createCookieSessionStorage({
+  cookie: {
+    name: "__session",
+    httpOnly: true,
+    maxAge: 0,
+    path: "/",
+    sameSite: "lax",
+    secrets: [process.env.SESSION_SECRET],
+    secure: process.env.NODE_ENV === "production",
+  },
+});
+
+const USER_SESSION_KEY = "userId";
+const USER_ROLE_KEY = "userRole";
+const fourteenDaysInSeconds = 60 * 60 * 24 * 14;
+const thirtyDaysInSeconds = 60 * 60 * 24 * 30;
+
+export async function getSession(request: Request) {
+  const cookie = request.headers.get("Cookie");
+  return sessionStorage.getSession(cookie);
+}
 
 /**
- * This should be used any time the redirect path is user-provided
- * (Like the query string on our login/signup pages). This avoids
- * open-redirect vulnerabilities.
- * @param {string} to The redirect destination
- * @param {string} defaultRedirect The redirect to use if the to is unsafe.
+ * Returns the userId from the session.
  */
-export function safeRedirect(
-  to: FormDataEntryValue | string | null | undefined,
-  defaultRedirect: string = DEFAULT_REDIRECT
+export async function getUserId(
+  request: Request
+): Promise<User["id"] | undefined> {
+  const session = await getSession(request);
+  const userId = session.get(USER_SESSION_KEY);
+  return userId;
+}
+
+export async function getUser(request: Request) {
+  const userId = await getUserId(request);
+  if (userId === undefined) return null;
+
+  const user = await getUserById(userId);
+  if (user) return user;
+
+  throw await logout(request);
+}
+
+export async function requireUserId(
+  request: Request,
+  redirectTo: string = new URL(request.url).pathname
 ) {
-  if (!to || typeof to !== "string") {
-    return defaultRedirect;
+  const userId = await getUserId(request);
+  if (!userId) {
+    const searchParams = new URLSearchParams([["redirectTo", redirectTo]]);
+    throw redirect(`/login?${searchParams}`);
   }
 
-  if (!to.startsWith("/") || to.startsWith("//")) {
-    return defaultRedirect;
-  }
-
-  return to;
+  return userId;
 }
 
-/**
- * This base hook is used in other hooks to quickly search for specific data
- * across all loader data using useMatches.
- * @param {string} id The route id
- * @returns {JSON|undefined} The router data or undefined if not found
- */
-export function useMatchesData(
-  id: string
-): Record<string, unknown> | undefined {
-  const matchingRoutes = useMatches();
-  const route = useMemo(
-    () => matchingRoutes.find((route) => route.id === id),
-    [matchingRoutes, id]
-  );
-  return route?.data;
+export async function requireUser(
+  request: Request,
+  redirectTo: string = new URL(request.url).pathname
+) {
+  const userId = await requireUserId(request, redirectTo);
+  const user = await getUserById(userId);
+  if (user) return user;
+
+  throw await logout(request);
 }
 
-function isUser(user: any): user is User {
-  return user && typeof user === "object" && typeof user.email === "string";
+export async function createUserSession({
+  request,
+  userId,
+  role,
+  remember = false,
+  redirectTo,
+}: {
+  request: Request;
+  userId: User["id"];
+  role: User["role"];
+  remember?: boolean;
+  redirectTo: string;
+}) {
+  const session = await getSession(request);
+  session.set(USER_SESSION_KEY, userId);
+  session.set(USER_ROLE_KEY, role);
+
+  return redirect(redirectTo, {
+    headers: {
+      "Set-Cookie": await sessionStorage.commitSession(session, {
+        maxAge: remember ? fourteenDaysInSeconds : thirtyDaysInSeconds,
+      }),
+    },
+  });
 }
 
-export function useOptionalUser(): User | undefined {
-  const data = useMatchesData("root");
-  if (!data || !isUser(data.user)) {
-    return undefined;
-  }
-  return data.user;
+export async function logout(request: Request) {
+  const session = await getSession(request);
+
+  // For some reason destroySession isn't removing session keys
+  // So, unsetting the keys manually
+  session.unset(USER_SESSION_KEY);
+  session.unset(USER_ROLE_KEY);
+
+  return redirect("/login", {
+    headers: {
+      "Set-Cookie": await sessionStorage.destroySession(session),
+    },
+  });
 }
 
-export function useUser(): User {
-  const maybeUser = useOptionalUser();
-  if (!maybeUser) {
-    throw new Error(
-      "No user found in root loader, but user is required by useUser. If user is optional, try useOptionalUser instead."
-    );
-  }
-  return maybeUser;
+export async function isCustomer(request: Request) {
+  const session = await getSession(request);
+  return session.get(USER_ROLE_KEY) === Role.CUSTOMER;
 }
 
-export function validateEmail(email: unknown): email is string {
-  return typeof email === "string" && email.length > 3 && email.includes("@");
+export async function isAdmin(request: Request) {
+  const session = await getSession(request);
+  return session.get(USER_ROLE_KEY) === Role.ADMIN;
 }

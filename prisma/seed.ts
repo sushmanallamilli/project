@@ -1,50 +1,49 @@
-import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import {PrismaClient, Role} from '@prisma/client'
+import slugify from 'slugify'
+import {createPasswordHash} from '~/utils/misc.server'
+import {seedProducts} from './data'
 
-const prisma = new PrismaClient();
+const db = new PrismaClient()
 
 async function seed() {
-  const email = "user@app.com";
-  // cleanup the existing database
-  await prisma.user.delete({ where: { email } }).catch(() => {
-    // no worries if it doesn't exist yet
-  });
-  const hashedPassword = await bcrypt.hash("password", 10);
-  const user = await prisma.user.create({
-    data: {
-      email,
-      password: {
-        create: {
-          hash: hashedPassword,
-        },
-      },
-    },
-  });
+	await db.user.deleteMany()
+	await db.product.deleteMany()
+	await db.productOrder.deleteMany()
 
-  await prisma.note.create({
-    data: {
-      title: "My first note",
-      body: "Hello, world!",
-      userId: user.id,
-    },
-  });
+	await db.user.create({
+		data: {
+			name: 'John Doe',
+			email: 'user@app.com',
+			password: await createPasswordHash('password'),
+			role: Role.CUSTOMER,
+		},
+	})
 
-  await prisma.note.create({
-    data: {
-      title: "My second note",
-      body: "Hello, world!",
-      userId: user.id,
-    },
-  });
+	await db.user.create({
+		data: {
+			name: 'Admin',
+			email: 'admin@app.com',
+			password: await createPasswordHash('password'),
+			role: Role.ADMIN,
+		},
+	})
 
-  console.log(`Database has been seeded. 🌱`);
+	await db.product.createMany({
+		data: seedProducts.map(product => ({
+			...product,
+			slug: slugify(product.name, {lower: true}),
+			category: product.category[0],
+		})),
+	})
+
+	console.log(`Database has been seeded. 🌱`)
 }
 
 seed()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+	.catch(e => {
+		console.error(e)
+		process.exit(1)
+	})
+	.finally(async () => {
+		await db.$disconnect()
+	})

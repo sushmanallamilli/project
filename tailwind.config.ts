@@ -5,5 +5,8 @@ export default {
   theme: {
     extend: {},
   },
+  corePlugins: {
+    preflight: true,
+  },
   plugins: [],
 } satisfies Config;
