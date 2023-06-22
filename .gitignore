@@ -4,7 +4,7 @@ pnpm-lock.yml
 
 /build
 /public/build
-# .env
+.env
 
 /cypress/screenshots
 /cypress/videos
