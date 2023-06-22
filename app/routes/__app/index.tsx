@@ -12,7 +12,7 @@ export default function Dashboard() {
         <TailwindContainer>
           <div className="px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
             <h2 className="text-2xl font-extrabold tracking-tight text-gray-900">
-              My Products
+              Products
             </h2>
 
             <div className="-mx-px mt-12 grid grid-cols-2 border-l border-gray-200 sm:mx-0 md:grid-cols-3 lg:grid-cols-4">
