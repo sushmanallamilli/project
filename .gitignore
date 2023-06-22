@@ -2,8 +2,6 @@ yarn.lock
 pnpm-lock.yaml
 pnpm-lock.yml
 
-node_modules
-
 /build
 /public/build
 # .env
@@ -12,6 +10,6 @@ node_modules
 /cypress/videos
 /postgres-data
 
-node_modules
+/node_modules
 
 **/.DS_Store

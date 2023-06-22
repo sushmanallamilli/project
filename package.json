@@ -5,7 +5,7 @@
   "scripts": {
     "clean": "rimraf ./build ./public/build",
     "prebuild": "npx prisma migrate deploy",
-    "build": "cross-env NODE_ENV=production run-s build:*",
+    "build": "cross-env run-s build:*",
     "build:remix": "remix build",
     "build:server": "esbuild --platform=node --format=cjs ./server.ts --outdir=build --bundle",
     "dev": "run-p dev:*",
@@ -18,7 +18,7 @@
     "lint": "eslint --cache --cache-location ./node_modules/.cache/eslint .",
     "lint:repo": "npm run lint -- --config ./.eslintrc.repo.js",
     "setup": "prisma generate && prisma db seed",
-    "start": "cross-env NODE_ENV=production node ./build/server.js"
+    "start": "cross-env node ./build/server.js"
   },
   "prettier": {},
   "eslintIgnore": [
